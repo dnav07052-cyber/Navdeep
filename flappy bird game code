@@ -1,0 +1,285 @@
+#include <iostream>
+#include <fstream>
+#include <windows.h>
+#include <conio.h>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <cctype>
+#include <string>
+
+using namespace std;
+
+const int WIDTH = 40;
+const int HEIGHT = 20;
+
+void setColor(int colorCode) {
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, colorCode);
+}
+
+void gotoxy(int x, int y) {
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), &coord);
+}
+
+void hideCursor() {
+    HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_CURSOR_INFO info;
+    info.dwSize = 100;
+    info.bVisible = FALSE;
+    SetConsoleCursorInfo(consoleHandle, &info);
+}
+
+struct Pipe {
+    int x;
+    float gapY;
+    int gapSize;
+    bool isMoving;
+    float speedY;
+    bool passedP1;
+    bool passedP2;
+
+    // Constructor for C++98 compatibility
+    Pipe(int _x, float _gapY, int _gapSize, bool _isMoving, float _speedY) 
+        : x(_x), gapY(_gapY), gapSize(_gapSize), isMoving(_isMoving), speedY(_speedY), passedP1(false), passedP2(false) {}
+};
+
+string getKeyName(char key) {
+    if (key == ' ') return "SPACE";
+    string s = "";
+    s += (char)toupper((unsigned char)key);
+    return s;
+}
+
+int main() {
+    srand((unsigned)time(0));
+    hideCursor();
+
+    char keyP1 = 'w';
+    char keyP2 = ' ';
+
+    system("cls");
+    setColor(11);
+    cout << "========================================\n";
+    cout << "     CUSTOM CONTROL REMAPPING SETUP     \n";
+    cout << "========================================\n\n";
+
+    setColor(14);
+    cout << "Press key for Player 1 Jump (e.g., W, A): ";
+    keyP1 = _getch();
+    cout << "[" << getKeyName(keyP1) << "]\n\n";
+
+    setColor(13);
+    cout << "Press key for Player 2 Jump (e.g., SPACE, L): ";
+    keyP2 = _getch();
+    cout << "[" << getKeyName(keyP2) << "]\n\n";
+
+    setColor(11);
+    cout << "NOTE:\n";
+    cout << " * Green Pipes (#) are static.\n";
+    cout << " * Red Pipes   (#) OSCILLATE up and down!\n\n";
+
+    setColor(15);
+    cout << "Press ANY KEY to launch game...";
+    _getch();
+
+    int gapSize = 6;
+    int sleepTime = 40;
+    float gravity = 0.35f;
+    const float jump = -1.8f;
+
+    float bird1Y = HEIGHT / 2.0f - 1;
+    float vel1 = 0.0f;
+    bool p1Alive = true;
+    int p1Score = 0;
+    const int bird1X = 8;
+
+    float bird2Y = HEIGHT / 2.0f + 1;
+    float vel2 = 0.0f;
+    bool p2Alive = true;
+    int p2Score = 0;
+    const int bird2X = 8;
+
+    system("cls");
+
+    vector<Pipe> pipes;
+    pipes.push_back(Pipe(WIDTH - 1, (float)(rand() % (HEIGHT - gapSize - 2) + 1), gapSize, false, 0.0f));
+
+    int frameCount = 0;
+    bool gameOver = false;
+
+    while (!gameOver) {
+        while (_kbhit()) {
+            char ch = _getch();
+            if (tolower((unsigned char)ch) == tolower((unsigned char)keyP1) && p1Alive) {
+                vel1 = jump;
+                Beep(600, 15);
+            }
+            if (tolower((unsigned char)ch) == tolower((unsigned char)keyP2) && p2Alive) {
+                vel2 = jump;
+                Beep(900, 15);
+            }
+        }
+
+        if (p1Alive) {
+            vel1 += gravity;
+            bird1Y += vel1;
+            if (bird1Y >= HEIGHT - 1) {
+                p1Alive = false;
+                Beep(300, 40);
+            }
+            if (bird1Y < 0) bird1Y = 0;
+        }
+
+        if (p2Alive) {
+            vel2 += gravity;
+            bird2Y += vel2;
+            if (bird2Y >= HEIGHT - 1) {
+                p2Alive = false;
+                Beep(300, 40);
+            }
+            if (bird2Y < 0) bird2Y = 0;
+        }
+
+        if (!p1Alive && !p2Alive) {
+            gameOver = true;
+            break;
+        }
+
+        frameCount++;
+        if (frameCount % 18 == 0) {
+            bool isMoving = (rand() % 100 < 50);
+            float dir = (rand() % 2 == 0) ? 0.35f : -0.35f;
+            float startGapY = (float)(rand() % (HEIGHT - gapSize - 2) + 1);
+
+            pipes.push_back(Pipe(WIDTH - 1, startGapY, gapSize, isMoving, dir));
+        }
+
+        for (size_t i = 0; i < pipes.size(); i++) {
+            pipes[i].x--;
+
+            if (pipes[i].isMoving) {
+                pipes[i].gapY += pipes[i].speedY;
+                if (pipes[i].gapY <= 1.0f || pipes[i].gapY >= HEIGHT - pipes[i].gapSize - 2) {
+                    pipes[i].speedY = -pipes[i].speedY;
+                }
+            }
+
+            int currentGapY = (int)(pipes[i].gapY);
+
+            if (p1Alive && pipes[i].x == bird1X) {
+                int b1Y = (int)(bird1Y);
+                if (b1Y < currentGapY || b1Y >= currentGapY + pipes[i].gapSize) {
+                    p1Alive = false;
+                    Beep(300, 40);
+                } else if (!pipes[i].passedP1) {
+                    p1Score++;
+                    pipes[i].passedP1 = true;
+                }
+            }
+
+            if (p2Alive && pipes[i].x == bird2X) {
+                int b2Y = (int)(bird2Y);
+                if (b2Y < currentGapY || b2Y >= currentGapY + pipes[i].gapSize) {
+                    p2Alive = false;
+                    Beep(300, 40);
+                } else if (!pipes[i].passedP2) {
+                    p2Score++;
+                    pipes[i].passedP2 = true;
+                }
+            }
+        }
+
+        if (!pipes.empty() && pipes[0].x < 0) {
+            pipes.erase(pipes.begin());
+        }
+
+        char screen[HEIGHT][WIDTH + 1];
+
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                if (y == HEIGHT - 1) screen[y][x] = '=';
+                else screen[y][x] = ' ';
+            }
+            screen[y][WIDTH] = '\0';
+        }
+
+        for (size_t i = 0; i < pipes.size(); i++) {
+            if (pipes[i].x >= 0 && pipes[i].x < WIDTH) {
+                int gY = (int)(pipes[i].gapY);
+                for (int y = 0; y < HEIGHT - 1; y++) {
+                    if (y < gY || y >= gY + pipes[i].gapSize) {
+                        screen[y][pipes[i].x] = pipes[i].isMoving ? 'M' : '#';
+                    }
+                }
+            }
+        }
+
+        int b1Y = (int)(bird1Y);
+        int b2Y = (int)(bird2Y);
+
+        if (p1Alive && b1Y >= 0 && b1Y < HEIGHT - 1) screen[b1Y][bird1X] = '1';
+        if (p2Alive && b2Y >= 0 && b2Y < HEIGHT - 1) {
+            if (p1Alive && b1Y == b2Y) screen[b2Y][bird2X] = 'X';
+            else screen[b2Y][bird2X] = '2';
+        }
+
+        gotoxy(0, 0);
+        int currentColor = -1;
+
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                char ch = screen[y][x];
+                int targetColor = 7;
+
+                if (ch == '1') targetColor = 14;
+                else if (ch == '2') targetColor = 13;
+                else if (ch == 'X') targetColor = 12;
+                else if (ch == '#') targetColor = 10;
+                else if (ch == 'M') targetColor = 12;
+                else if (ch == '=') targetColor = 6;
+
+                if (targetColor != currentColor) {
+                    setColor(targetColor);
+                    currentColor = targetColor;
+                }
+                cout << (ch == 'M' ? '#' : ch);
+            }
+            cout << "\n";
+        }
+
+        gotoxy(0, HEIGHT);
+        setColor(14);
+        cout << "P1 [" << getKeyName(keyP1) << "]: " << p1Score << (p1Alive ? " (ALIVE) " : " (CRASHED)");
+        setColor(7); cout << " | ";
+        setColor(13);
+        cout << "P2 [" << getKeyName(keyP2) << "]: " << p2Score << (p2Alive ? " (ALIVE)   \n" : " (CRASHED)  \n");
+
+        Sleep(sleepTime);
+    }
+
+    Beep(400, 150); Beep(300, 150); Beep(200, 300);
+
+    gotoxy(0, HEIGHT + 3);
+    setColor(11);
+    cout << "========================================\n";
+    cout << "               MATCH OVER!              \n";
+    cout << "========================================\n";
+
+    setColor(15);
+    cout << "  Final Scores: P1 = " << p1Score << "  |  P2 = " << p2Score << "\n\n";
+
+    if (p1Score > p2Score) {
+        setColor(14); cout << "  >>> WINNER: PLAYER 1! <<<\n";
+    } else if (p2Score > p1Score) {
+        setColor(13); cout << "  >>> WINNER: PLAYER 2! <<<\n";
+    } else {
+        setColor(10); cout << "  >>> IT'S A TIE! <<<\n";
+    }
+
+    setColor(7);
+    return 0;
+}
